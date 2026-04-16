@@ -1,7 +1,5 @@
 use nix::sched::{clone, CloneFlags};
 use nix::sys::wait::waitpid;
-use nix::unistd::{execvp, Pid};
-use std::ffi::CString;
 
 use crate::cli::CreateArgs;
 use crate::types::AnyError;
@@ -22,7 +20,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         | CloneFlags::CLONE_NEWNS
         | CloneFlags::CLONE_NEWUTS
         | CloneFlags::CLONE_NEWIPC
-        | CloneFlags::CLONE_NETNET;
+        | CloneFlags::CLONE_NEWNET;
 
     let mut stack: Vec<u8> = vec![0u8; 1024 * 1024];
 
@@ -42,8 +40,15 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     };
 
     println!("Container PID: {}", child_pid);
-    waitpid(child, None)?;
+    waitpid(child_pid, None)?;
     println!("Container exited");
 
+    Ok(())
+}
+
+fn run_child() -> Result<(), AnyError> {
+    let shell = std::ffi::CString::new("/bin/sh")?;
+    let args = vec![std::ffi::CString::new("/bin/sh")?];
+    nix::unistd::execvp(&shell, &args)?;
     Ok(())
 }
