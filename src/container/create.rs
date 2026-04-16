@@ -48,5 +48,6 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
 fn run_child() -> Result<(), AnyError> {
     println!("inside container");
+    std::thread::sleep(std::time::Duration::from_secs(5));
     Ok(())
 }
