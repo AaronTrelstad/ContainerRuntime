@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = "4.6.1"
-nix = {version = "0.31.2", features = ["mount", "sched", "unistd"]}
+clap = { version = "4.6.1", features = ["derive"] }
+nix = { version = "0.31.2", features = ["sched", "mount", "unistd", "process"] }
