@@ -40,20 +40,13 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     };
 
     println!("Container PID: {}", child_pid);
-    match waitpid(child_pid, None) {
-        Ok(_) => println!("container exited cleanly"),
-        Err(nix::errno::Errno::ECHILD) => println!("child already exited (but it ran!)"),
-        Err(e) => eprintln!("waitpid error: {}", e),
-    }
+    waitpid(child_pid, None)?;
     println!("Container exited");
 
     Ok(())
 }
 
 fn run_child() -> Result<(), AnyError> {
-    use std::io::Write;
-    println!("hello from inside the container!");
-    std::io::stdout().flush()?;
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    println!("inside container");
     Ok(())
 }
