@@ -47,8 +47,6 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 }
 
 fn run_child() -> Result<(), AnyError> {
-    let shell = std::ffi::CString::new("/bin/sh")?;
-    let args = vec![std::ffi::CString::new("/bin/sh")?];
-    nix::unistd::execvp(&shell, &args)?;
+    println!("inside container");
     Ok(())
 }
