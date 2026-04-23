@@ -21,18 +21,16 @@ pub struct ContainerState {
     pub bundle: String,
 }
 
-impl ContainerState {
-    pub fn save(&self) -> Result<(), AnyError> {
+pub fn save(args: StateArgs) -> Result<(), AnyError> {
+    todo!()
+}
 
-    }
+pub fn load(container_id: &str) -> Result<(), AnyError> {
+    todo!()
+}
 
-    pub fn load(container_id: &str) -> Result<Self, AnyError> {
-
-    }
-
-    pub fn delete(container_id: &str) -> Result<(), AnyError> {
-
-    }
+pub fn delete(container_id: &str) -> Result<(), AnyError> {
+    todo!()
 }
 
 fn container_dir(id: &str) -> PathBuf {
