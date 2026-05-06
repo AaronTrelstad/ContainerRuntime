@@ -8,7 +8,6 @@ use std::os::unix::io::RawFd;
 use crate::cli::CreateArgs;
 use crate::types::AnyError;
 
-
 const MEMORY_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
 const CPU_QUOTA_USEC: u64 = 50_000;
 const CPU_PERIOD_USEC: u64 = 100_000;
@@ -48,8 +47,15 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     unsafe { write(BorrowedFd::borrow_raw(write_fd), &[1u8])? };
     close(write_fd)?;
 
-    println!("Container '{}' created (PID {})", args.container_id, child_pid);
-    waitpid(child_pid, None)?;
+    println!(
+        "Container '{}' created (PID {})",
+        args.container_id, child_pid
+    );
+    match waitpid(child_pid, None) {
+        Ok(_) => {}
+        Err(nix::errno::Errno::ECHILD) => {}
+        Err(e) => return Err(Box::new(e)),
+    }
     println!("Container '{}' exited", args.container_id);
 
     Ok(())
@@ -58,28 +64,28 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path)
-        .map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
         "+cpu +memory",
-    ).map_err(|e| format!("subtree_control: {}", e))?;
+    )
+    .map_err(|e| format!("subtree_control: {}", e))?;
 
     fs::write(
         format!("{}/memory.max", cgroup_path),
         MEMORY_LIMIT_BYTES.to_string(),
-    ).map_err(|e| format!("memory.max: {}", e))?;
+    )
+    .map_err(|e| format!("memory.max: {}", e))?;
 
     fs::write(
         format!("{}/cpu.max", cgroup_path),
         format!("{} {}", CPU_QUOTA_USEC, CPU_PERIOD_USEC),
-    ).map_err(|e| format!("cpu.max: {}", e))?;
+    )
+    .map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(
-        format!("{}/cgroup.procs", cgroup_path),
-        pid.to_string(),
-    ).map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
+        .map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",

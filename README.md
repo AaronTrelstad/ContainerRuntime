@@ -14,5 +14,27 @@ course goals by exploring how system-level security mechanisms can be applied to
 cloud-based deployments and users' privacy.
 
 # Usage
+```bash
+chmod 400 ~/Downloads/*.pem
+ssh -i ~/Downloads/*.pem ec2-user@<your-ec2-ip>
+```
+
+```bash
+sudo yum install git gcc -y
+```
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+rustc --version
+```
+
+```bash
+git clone https://github.com/YOUR_USERNAME/ContainerRuntime.git
+cd ContainerRuntime
 cargo build
-cargo run
+```
+
+```bash
+sudo target/debug/ContainerRuntime create mycontainer
+```
