@@ -30,7 +30,7 @@ rustc --version
 ```
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ContainerRuntime.git
+git clone https://github.com/AaronTrelstad/ContainerRuntime.git
 cd ContainerRuntime
 cargo build
 ```
