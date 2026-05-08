@@ -41,7 +41,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
                 move || match run_child(sync_read_fd, kill_read_fd, kill_write_fd) {
                     Ok(_) => 0,
                     Err(e) => {
-                        eprintln!("[child] error: {}", e);
+                        eprintln!("error: {}", e);
                         -1
                     }
                 },
@@ -105,7 +105,7 @@ fn run_child(
     close(sync_read_fd)?;
     close(kill_write_fd)?;
 
-    eprintln!("inside container (PID={})", std::process::id());
+    eprintln!("inside container, PID={}", std::process::id());
 
     eprintln!("blocking on kill pipe");
     let mut kill_buf = [0u8; 1];
@@ -172,7 +172,7 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
             Err(e) if e.raw_os_error() == Some(16) => {
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 if attempt == 5 {
-                    return Err("cgroup still busy after retries".into());
+                    return Err("cgroup still busy".into());
                 }
             }
             Err(e) => return Err(format!("remove cgroup: {}", e).into()),
