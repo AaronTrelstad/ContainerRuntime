@@ -29,8 +29,8 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     let flags = CloneFlags::CLONE_NEWPID
         | CloneFlags::CLONE_NEWNS
         | CloneFlags::CLONE_NEWUTS
-        | CloneFlags::CLONE_NEWIPC
-        | CloneFlags::CLONE_NEWNET;
+        | CloneFlags::CLONE_NEWIPC;
+        //| CloneFlags::CLONE_NEWNET;
 
     let mut stack: Vec<u8> = vec![0u8; 1024 * 1024];
 
