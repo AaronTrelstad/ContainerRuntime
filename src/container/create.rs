@@ -1,4 +1,5 @@
 use nix::sched::{CloneFlags, clone};
+use nix::sys::signal::Signal;
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{close, pipe, read, write};
 use std::fs;
@@ -47,7 +48,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
             ),
             &mut stack,
             flags,
-            None,
+            Some(Signal::SIGCHLD as i32),
         )?
     };
 
