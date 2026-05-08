@@ -1,5 +1,5 @@
-use nix::sched::{clone, CloneFlags};
-use nix::sys::wait::{waitpid, WaitStatus};
+use nix::sched::{CloneFlags, clone};
+use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{close, pipe, read, write};
 use std::fs;
 use std::os::fd::{BorrowedFd, IntoRawFd};
@@ -36,15 +36,15 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     let child_pid = unsafe {
         clone(
-            Box::new(move || {
-                match run_child(sync_read_fd, kill_read_fd, kill_write_fd) {
+            Box::new(
+                move || match run_child(sync_read_fd, kill_read_fd, kill_write_fd) {
                     Ok(_) => 0,
                     Err(e) => {
                         eprintln!("[child] error: {}", e);
                         -1
                     }
-                }
-            }),
+                },
+            ),
             &mut stack,
             flags,
             None,
@@ -72,16 +72,16 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     match waitpid(child_pid, None) {
         Ok(WaitStatus::Exited(pid, code)) => {
-            eprintln!("[parent] child {} exited with code {}", pid, code);
+            eprintln!("child {} exited with code {}", pid, code);
         }
         Ok(WaitStatus::Signaled(pid, signal, _)) => {
-            eprintln!("[parent] child {} killed by signal {:?}", pid, signal);
+            eprintln!("child {} killed by signal {:?}", pid, signal);
         }
         Ok(other) => {
-            eprintln!("[parent] waitpid: {:?}", other);
+            eprintln!("waitpid: {:?}", other);
         }
         Err(nix::errno::Errno::ECHILD) => {
-            eprintln!("[parent] ECHILD");
+            eprintln!("ECHILD");
         }
         Err(e) => return Err(Box::new(e)),
     }
@@ -118,8 +118,7 @@ fn run_child(
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path)
-        .map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
@@ -139,11 +138,8 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     )
     .map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(
-        format!("{}/cgroup.procs", cgroup_path),
-        pid.to_string(),
-    )
-    .map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
+        .map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",
@@ -162,8 +158,7 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
         return Ok(());
     }
 
-    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
-        .unwrap_or_default();
+    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path)).unwrap_or_default();
 
     for pid in procs.split_whitespace() {
         fs::write("/sys/fs/cgroup/cgroup.procs", pid)
