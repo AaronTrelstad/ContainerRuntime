@@ -1,5 +1,5 @@
 use nix::sched::{CloneFlags, clone};
-use nix::sys::signal::Signal;
+use nix::sys::signal::{SigSet, Signal};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{close, pipe, read, write};
 use std::fs;
@@ -22,11 +22,6 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         (r.into_raw_fd(), w.into_raw_fd())
     };
 
-    let (kill_read_fd, kill_write_fd) = {
-        let (r, w) = pipe()?;
-        (r.into_raw_fd(), w.into_raw_fd())
-    };
-
     let flags = CloneFlags::CLONE_NEWPID
         | CloneFlags::CLONE_NEWNS
         | CloneFlags::CLONE_NEWUTS
@@ -37,15 +32,13 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     let child_pid = unsafe {
         clone(
-            Box::new(
-                move || match run_child(sync_read_fd, kill_read_fd, kill_write_fd) {
-                    Ok(_) => 0,
-                    Err(e) => {
-                        eprintln!("error: {}", e);
-                        -1
-                    }
-                },
-            ),
+            Box::new(move || match run_child(sync_read_fd) {
+                Ok(_) => 0,
+                Err(e) => {
+                    eprintln!("[child] error: {}", e);
+                    -1
+                }
+            }),
             &mut stack,
             flags,
             Some(Signal::SIGCHLD as i32),
@@ -53,17 +46,15 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     };
 
     close(sync_read_fd)?;
-    close(kill_read_fd)?;
 
     setup_cgroup(&args.container_id, child_pid.as_raw())?;
-
     unsafe { write(BorrowedFd::borrow_raw(sync_write_fd), &[1u8])? };
     close(sync_write_fd)?;
 
     let run_dir = format!("/tmp/containerruntime/{}", args.container_id);
     fs::create_dir_all(&run_dir)?;
     fs::write(format!("{}/pid", run_dir), child_pid.as_raw().to_string())?;
-    fs::write(format!("{}/kill_fd", run_dir), kill_write_fd.to_string())?;
+    fs::write(format!("{}/status", run_dir), "created")?;
 
     println!("Container '{}' created", args.container_id);
 
@@ -87,30 +78,26 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         Err(e) => return Err(Box::new(e)),
     }
 
-    close(kill_write_fd)?;
     println!("Container '{}' exited", args.container_id);
     cleanup_cgroup(&args.container_id)?;
     fs::remove_dir_all(&run_dir)?;
     Ok(())
 }
 
-fn run_child(
-    sync_read_fd: RawFd,
-    kill_read_fd: RawFd,
-    kill_write_fd: RawFd,
-) -> Result<(), AnyError> {
+fn run_child(sync_read_fd: RawFd) -> Result<(), AnyError> {
     let mut buf = [0u8; 1];
     eprintln!("waiting for sync signal");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
-    close(kill_write_fd)?;
 
     eprintln!("inside container, PID={}", std::process::id());
 
-    eprintln!("blocking on kill pipe");
-    let mut kill_buf = [0u8; 1];
-    unsafe { read(BorrowedFd::borrow_raw(kill_read_fd), &mut kill_buf)? };
-    close(kill_read_fd)?;
+    let mut mask = SigSet::empty();
+    mask.add(Signal::SIGTERM);
+    mask.thread_block()?;
+
+    eprintln!("waiting for SIGTERM");
+    mask.wait()?;
 
     eprintln!("shutting down");
     Ok(())
@@ -119,7 +106,8 @@ fn run_child(
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path)
+        .map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
@@ -139,8 +127,11 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     )
     .map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
-        .map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(
+        format!("{}/cgroup.procs", cgroup_path),
+        pid.to_string(),
+    )
+    .map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",
@@ -159,7 +150,8 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
         return Ok(());
     }
 
-    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path)).unwrap_or_default();
+    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
+        .unwrap_or_default();
 
     for pid in procs.split_whitespace() {
         fs::write("/sys/fs/cgroup/cgroup.procs", pid)
