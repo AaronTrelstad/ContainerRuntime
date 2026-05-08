@@ -14,6 +14,8 @@ const CPU_PERIOD_USEC: u64 = 100_000;
 const CGROUP_ROOT: &str = "/sys/fs/cgroup/containerruntime";
 
 pub fn create(args: CreateArgs) -> Result<(), AnyError> {
+    cleanup_cgroup(&args.container_id)?;
+
     let (sync_read_fd, sync_write_fd) = {
         let (r, w) = pipe()?;
         (r.into_raw_fd(), w.into_raw_fd())
@@ -134,19 +136,26 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
         return Ok(());
     }
 
+    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
+        .unwrap_or_default();
+
+    for pid in procs.split_whitespace() {
+        fs::write("/sys/fs/cgroup/cgroup.procs", pid)
+            .map_err(|e| format!("failed to move pid {} to root: {}", pid, e))?;
+    }
+
     for attempt in 1..=5 {
         match fs::remove_dir(&cgroup_path) {
-            Ok(_) => {
-                println!("cgroup cleaned up");
-                return Ok(());
-            }
+            Ok(_) => return Ok(()),
             Err(e) if e.raw_os_error() == Some(16) => {
-                println!("cgroup busy, retrying ({}/5)...", attempt);
                 std::thread::sleep(std::time::Duration::from_millis(200));
+                if attempt == 5 {
+                    return Err("cgroup still busy".into());
+                }
             }
             Err(e) => return Err(format!("remove cgroup: {}", e).into()),
         }
     }
 
-    Err("cgroup still busy".into())
+    Ok(())
 }
