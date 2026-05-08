@@ -1,5 +1,5 @@
-use nix::sched::{CloneFlags, clone};
-use nix::sys::wait::{WaitStatus, waitpid};
+use nix::sched::{clone, CloneFlags};
+use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::{close, pipe, read, write};
 use std::fs;
 use std::os::fd::{BorrowedFd, IntoRawFd};
@@ -36,11 +36,13 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     let child_pid = unsafe {
         clone(
-            Box::new(move || match run_child(sync_read_fd, kill_read_fd) {
-                Ok(_) => 0,
-                Err(e) => {
-                    eprintln!("child error: {}", e);
-                    -1
+            Box::new(move || {
+                match run_child(sync_read_fd, kill_read_fd, kill_write_fd) {
+                    Ok(_) => 0,
+                    Err(e) => {
+                        eprintln!("[child] error: {}", e);
+                        -1
+                    }
                 }
             }),
             &mut stack,
@@ -48,11 +50,6 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
             None,
         )?
     };
-
-    eprintln!(
-        "child_pid={} sync_read={} sync_write={} kill_read={} kill_write={}",
-        child_pid, sync_read_fd, sync_write_fd, kill_read_fd, kill_write_fd
-    );
 
     close(sync_read_fd)?;
     close(kill_read_fd)?;
@@ -75,16 +72,16 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     match waitpid(child_pid, None) {
         Ok(WaitStatus::Exited(pid, code)) => {
-            eprintln!("child {} exited with code {}", pid, code);
+            eprintln!("[parent] child {} exited with code {}", pid, code);
         }
         Ok(WaitStatus::Signaled(pid, signal, _)) => {
-            eprintln!("child {} killed by signal {:?}", pid, signal);
+            eprintln!("[parent] child {} killed by signal {:?}", pid, signal);
         }
         Ok(other) => {
-            eprintln!("waitpid returned: {:?}", other);
+            eprintln!("[parent] waitpid: {:?}", other);
         }
         Err(nix::errno::Errno::ECHILD) => {
-            eprintln!("ECHILD, no child to wait for");
+            eprintln!("[parent] ECHILD");
         }
         Err(e) => return Err(Box::new(e)),
     }
@@ -96,33 +93,33 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     Ok(())
 }
 
-fn run_child(sync_read_fd: RawFd, kill_read_fd: RawFd) -> Result<(), AnyError> {
+fn run_child(
+    sync_read_fd: RawFd,
+    kill_read_fd: RawFd,
+    kill_write_fd: RawFd,
+) -> Result<(), AnyError> {
     let mut buf = [0u8; 1];
     eprintln!("waiting for sync signal");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
-    eprintln!("inside container, PID={}", std::process::id());
+    close(kill_write_fd)?;
 
-    let fd_exists = std::path::Path::new(&format!("/proc/self/fd/{}", kill_read_fd)).exists();
-    eprintln!(
-        "kill_read_fd={} exists in /proc/self/fd: {}",
-        kill_read_fd, fd_exists
-    );
+    eprintln!("inside container (PID={})", std::process::id());
 
     eprintln!("blocking on kill pipe");
     let mut kill_buf = [0u8; 1];
-    let n = unsafe { read(BorrowedFd::borrow_raw(kill_read_fd), &mut kill_buf)? };
-    eprintln!("read returned n={}", n);
+    unsafe { read(BorrowedFd::borrow_raw(kill_read_fd), &mut kill_buf)? };
     close(kill_read_fd)?;
 
-    eprintln!("shutting down...");
+    eprintln!("shutting down");
     Ok(())
 }
 
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path)
+        .map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
@@ -142,8 +139,11 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     )
     .map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
-        .map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(
+        format!("{}/cgroup.procs", cgroup_path),
+        pid.to_string(),
+    )
+    .map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",
@@ -162,7 +162,8 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
         return Ok(());
     }
 
-    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path)).unwrap_or_default();
+    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
+        .unwrap_or_default();
 
     for pid in procs.split_whitespace() {
         fs::write("/sys/fs/cgroup/cgroup.procs", pid)
@@ -175,7 +176,7 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
             Err(e) if e.raw_os_error() == Some(16) => {
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 if attempt == 5 {
-                    return Err("cgroup still busy".into());
+                    return Err("cgroup still busy after retries".into());
                 }
             }
             Err(e) => return Err(format!("remove cgroup: {}", e).into()),
