@@ -129,8 +129,24 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
 
 pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
-    if std::path::Path::new(&cgroup_path).exists() {
-        fs::remove_dir(&cgroup_path).map_err(|e| format!("remove cgroup: {}", e))?;
+
+    if !std::path::Path::new(&cgroup_path).exists() {
+        return Ok(());
     }
-    Ok(())
+
+    for attempt in 1..=5 {
+        match fs::remove_dir(&cgroup_path) {
+            Ok(_) => {
+                println!("cgroup cleaned up");
+                return Ok(());
+            }
+            Err(e) if e.raw_os_error() == Some(16) => {
+                println!("cgroup busy, retrying ({}/5)...", attempt);
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Err(e) => return Err(format!("remove cgroup: {}", e).into()),
+        }
+    }
+
+    Err("cgroup still busy".into())
 }
