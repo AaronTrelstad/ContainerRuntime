@@ -49,6 +49,9 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         )?
     };
 
+    eprintln!("child_pid={} sync_read={} sync_write={} kill_read={} kill_write={}",
+    child_pid, sync_read_fd, sync_write_fd, kill_read_fd, kill_write_fd);
+
     close(sync_read_fd)?;
     close(kill_read_fd)?;
 
@@ -83,16 +86,17 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
 fn run_child(sync_read_fd: RawFd, kill_read_fd: RawFd) -> Result<(), AnyError> {
     let mut buf = [0u8; 1];
+    eprintln!("waiting for sync signal");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
+    eprintln!("got sync signal, inside container");
 
-    println!("inside container");
-
+    eprintln!("blocking on kill pipe");
     let mut kill_buf = [0u8; 1];
     unsafe { read(BorrowedFd::borrow_raw(kill_read_fd), &mut kill_buf)? };
     close(kill_read_fd)?;
 
-    println!("container shutting down...");
+    eprintln!("kill pipe EOF received, shutting down");
     Ok(())
 }
 
