@@ -89,14 +89,18 @@ fn run_child(sync_read_fd: RawFd, kill_read_fd: RawFd) -> Result<(), AnyError> {
     eprintln!("waiting for sync signal");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
-    eprintln!("got sync signal, inside container");
+    eprintln!("inside container, PID={}", std::process::id());
+
+    let fd_exists = std::path::Path::new(&format!("/proc/self/fd/{}", kill_read_fd)).exists();
+    eprintln!("kill_read_fd={} exists in /proc/self/fd: {}", kill_read_fd, fd_exists);
 
     eprintln!("blocking on kill pipe");
     let mut kill_buf = [0u8; 1];
-    unsafe { read(BorrowedFd::borrow_raw(kill_read_fd), &mut kill_buf)? };
+    let n = unsafe { read(BorrowedFd::borrow_raw(kill_read_fd), &mut kill_buf)? };
+    eprintln!("read returned n={}", n);
     close(kill_read_fd)?;
 
-    eprintln!("kill pipe EOF received, shutting down");
+    eprintln!("shutting down...");
     Ok(())
 }
 
