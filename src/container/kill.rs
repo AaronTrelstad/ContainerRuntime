@@ -14,8 +14,7 @@ pub fn kill(args: KillArgs) -> Result<(), AnyError> {
         .map_err(|_| "invalid kill_fd")?;
 
     close(kill_fd)?;
-    fs::remove_file(format!("{}/kill_fd", run_dir))?;
 
-    println!("Container '{}' stopped", args.container_id);
+    println!("Container '{}' killed", args.container_id);
     Ok(())
 }

@@ -36,7 +36,10 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         clone(
             Box::new(move || match run_child(sync_read_fd, kill_read_fd) {
                 Ok(_) => 0,
-                Err(e) => { eprintln!("child error: {}", e); -1 }
+                Err(e) => {
+                    eprintln!("child error: {}", e);
+                    -1
+                }
             }),
             &mut stack,
             flags,
@@ -45,6 +48,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     };
 
     setup_cgroup(&args.container_id, child_pid.as_raw())?;
+
     unsafe { write(BorrowedFd::borrow_raw(sync_write_fd), &[1u8])? };
     close(sync_write_fd)?;
 
@@ -53,11 +57,17 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     fs::write(format!("{}/pid", run_dir), child_pid.as_raw().to_string())?;
     fs::write(format!("{}/kill_fd", run_dir), kill_write_fd.to_string())?;
 
-    println!("Container '{}' created", args.container_id);
+    println!(
+        "Container '{}' created",
+        args.container_id
+    );
 
     crate::container::start::start(StartArgs {
         container_id: args.container_id.clone(),
     })?;
+
+    let mut buf = [0u8; 1];
+    unsafe { read(BorrowedFd::borrow_raw(kill_write_fd), &mut buf).ok() };
 
     match waitpid(child_pid, None) {
         Ok(_) => {}
@@ -67,6 +77,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     println!("Container '{}' exited", args.container_id);
     cleanup_cgroup(&args.container_id)?;
+    fs::remove_dir_all(&run_dir)?;
     Ok(())
 }
 
@@ -88,28 +99,28 @@ fn run_child(sync_read_fd: RawFd, kill_read_fd: RawFd) -> Result<(), AnyError> {
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path)
-        .map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
         "+cpu +memory",
-    ).map_err(|e| format!("subtree_control: {}", e))?;
+    )
+    .map_err(|e| format!("subtree_control: {}", e))?;
 
     fs::write(
         format!("{}/memory.max", cgroup_path),
         MEMORY_LIMIT_BYTES.to_string(),
-    ).map_err(|e| format!("memory.max: {}", e))?;
+    )
+    .map_err(|e| format!("memory.max: {}", e))?;
 
     fs::write(
         format!("{}/cpu.max", cgroup_path),
         format!("{} {}", CPU_QUOTA_USEC, CPU_PERIOD_USEC),
-    ).map_err(|e| format!("cpu.max: {}", e))?;
+    )
+    .map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(
-        format!("{}/cgroup.procs", cgroup_path),
-        pid.to_string(),
-    ).map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
+        .map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",
@@ -124,8 +135,7 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
 pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
     if std::path::Path::new(&cgroup_path).exists() {
-        fs::remove_dir(&cgroup_path)
-            .map_err(|e| format!("remove cgroup: {}", e))?;
+        fs::remove_dir(&cgroup_path).map_err(|e| format!("remove cgroup: {}", e))?;
     }
     Ok(())
 }
