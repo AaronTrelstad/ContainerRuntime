@@ -57,17 +57,11 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     fs::write(format!("{}/pid", run_dir), child_pid.as_raw().to_string())?;
     fs::write(format!("{}/kill_fd", run_dir), kill_write_fd.to_string())?;
 
-    println!(
-        "Container '{}' created",
-        args.container_id
-    );
+    println!("Container '{}' created", args.container_id);
 
     crate::container::start::start(StartArgs {
         container_id: args.container_id.clone(),
     })?;
-
-    let mut buf = [0u8; 1];
-    unsafe { read(BorrowedFd::borrow_raw(kill_write_fd), &mut buf).ok() };
 
     match waitpid(child_pid, None) {
         Ok(_) => {}
@@ -75,6 +69,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         Err(e) => return Err(Box::new(e)),
     }
 
+    close(kill_write_fd)?;
     println!("Container '{}' exited", args.container_id);
     cleanup_cgroup(&args.container_id)?;
     fs::remove_dir_all(&run_dir)?;
