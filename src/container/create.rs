@@ -106,8 +106,7 @@ fn run_child(sync_read_fd: RawFd) -> Result<(), AnyError> {
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path)
-        .map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
@@ -127,11 +126,8 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     )
     .map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(
-        format!("{}/cgroup.procs", cgroup_path),
-        pid.to_string(),
-    )
-    .map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
+        .map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",
@@ -150,8 +146,7 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
         return Ok(());
     }
 
-    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
-        .unwrap_or_default();
+    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path)).unwrap_or_default();
 
     for pid in procs.split_whitespace() {
         fs::write("/sys/fs/cgroup/cgroup.procs", pid)
