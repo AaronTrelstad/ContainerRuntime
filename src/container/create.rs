@@ -1,5 +1,5 @@
 use nix::sched::{CloneFlags, clone};
-use nix::sys::wait::waitpid;
+use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{close, pipe, read, write};
 use std::fs;
 use std::os::fd::{BorrowedFd, IntoRawFd};
@@ -29,8 +29,8 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     let flags = CloneFlags::CLONE_NEWPID
         | CloneFlags::CLONE_NEWNS
         | CloneFlags::CLONE_NEWUTS
-        | CloneFlags::CLONE_NEWIPC;
-        //| CloneFlags::CLONE_NEWNET;
+        | CloneFlags::CLONE_NEWIPC
+        | CloneFlags::CLONE_NEWNET;
 
     let mut stack: Vec<u8> = vec![0u8; 1024 * 1024];
 
@@ -49,8 +49,10 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         )?
     };
 
-    eprintln!("child_pid={} sync_read={} sync_write={} kill_read={} kill_write={}",
-    child_pid, sync_read_fd, sync_write_fd, kill_read_fd, kill_write_fd);
+    eprintln!(
+        "child_pid={} sync_read={} sync_write={} kill_read={} kill_write={}",
+        child_pid, sync_read_fd, sync_write_fd, kill_read_fd, kill_write_fd
+    );
 
     close(sync_read_fd)?;
     close(kill_read_fd)?;
@@ -72,8 +74,18 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     })?;
 
     match waitpid(child_pid, None) {
-        Ok(_) => {}
-        Err(nix::errno::Errno::ECHILD) => {}
+        Ok(WaitStatus::Exited(pid, code)) => {
+            eprintln!("child {} exited with code {}", pid, code);
+        }
+        Ok(WaitStatus::Signaled(pid, signal, _)) => {
+            eprintln!("child {} killed by signal {:?}", pid, signal);
+        }
+        Ok(other) => {
+            eprintln!("waitpid returned: {:?}", other);
+        }
+        Err(nix::errno::Errno::ECHILD) => {
+            eprintln!("ECHILD, no child to wait for");
+        }
         Err(e) => return Err(Box::new(e)),
     }
 
@@ -92,7 +104,10 @@ fn run_child(sync_read_fd: RawFd, kill_read_fd: RawFd) -> Result<(), AnyError> {
     eprintln!("inside container, PID={}", std::process::id());
 
     let fd_exists = std::path::Path::new(&format!("/proc/self/fd/{}", kill_read_fd)).exists();
-    eprintln!("kill_read_fd={} exists in /proc/self/fd: {}", kill_read_fd, fd_exists);
+    eprintln!(
+        "kill_read_fd={} exists in /proc/self/fd: {}",
+        kill_read_fd, fd_exists
+    );
 
     eprintln!("blocking on kill pipe");
     let mut kill_buf = [0u8; 1];
@@ -107,28 +122,28 @@ fn run_child(sync_read_fd: RawFd, kill_read_fd: RawFd) -> Result<(), AnyError> {
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path)
-        .map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
         "+cpu +memory",
-    ).map_err(|e| format!("subtree_control: {}", e))?;
+    )
+    .map_err(|e| format!("subtree_control: {}", e))?;
 
     fs::write(
         format!("{}/memory.max", cgroup_path),
         MEMORY_LIMIT_BYTES.to_string(),
-    ).map_err(|e| format!("memory.max: {}", e))?;
+    )
+    .map_err(|e| format!("memory.max: {}", e))?;
 
     fs::write(
         format!("{}/cpu.max", cgroup_path),
         format!("{} {}", CPU_QUOTA_USEC, CPU_PERIOD_USEC),
-    ).map_err(|e| format!("cpu.max: {}", e))?;
+    )
+    .map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(
-        format!("{}/cgroup.procs", cgroup_path),
-        pid.to_string(),
-    ).map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
+        .map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",
@@ -147,8 +162,7 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
         return Ok(());
     }
 
-    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
-        .unwrap_or_default();
+    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path)).unwrap_or_default();
 
     for pid in procs.split_whitespace() {
         fs::write("/sys/fs/cgroup/cgroup.procs", pid)
