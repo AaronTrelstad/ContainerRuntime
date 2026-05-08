@@ -49,6 +49,9 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         )?
     };
 
+    close(sync_read_fd)?;
+    close(kill_read_fd)?;
+
     setup_cgroup(&args.container_id, child_pid.as_raw())?;
 
     unsafe { write(BorrowedFd::borrow_raw(sync_write_fd), &[1u8])? };
@@ -96,28 +99,28 @@ fn run_child(sync_read_fd: RawFd, kill_read_fd: RawFd) -> Result<(), AnyError> {
 fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
-    fs::create_dir_all(&cgroup_path).map_err(|e| format!("create cgroup dir: {}", e))?;
+    fs::create_dir_all(&cgroup_path)
+        .map_err(|e| format!("create cgroup dir: {}", e))?;
 
     fs::write(
         format!("{}/cgroup.subtree_control", CGROUP_ROOT),
         "+cpu +memory",
-    )
-    .map_err(|e| format!("subtree_control: {}", e))?;
+    ).map_err(|e| format!("subtree_control: {}", e))?;
 
     fs::write(
         format!("{}/memory.max", cgroup_path),
         MEMORY_LIMIT_BYTES.to_string(),
-    )
-    .map_err(|e| format!("memory.max: {}", e))?;
+    ).map_err(|e| format!("memory.max: {}", e))?;
 
     fs::write(
         format!("{}/cpu.max", cgroup_path),
         format!("{} {}", CPU_QUOTA_USEC, CPU_PERIOD_USEC),
-    )
-    .map_err(|e| format!("cpu.max: {}", e))?;
+    ).map_err(|e| format!("cpu.max: {}", e))?;
 
-    fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
-        .map_err(|e| format!("cgroup.procs: {}", e))?;
+    fs::write(
+        format!("{}/cgroup.procs", cgroup_path),
+        pid.to_string(),
+    ).map_err(|e| format!("cgroup.procs: {}", e))?;
 
     println!(
         "cgroup ready: memory={}MB cpu={}% path={}",
