@@ -1,38 +1,26 @@
-use std::fs;
-use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
 use crate::cli::StateArgs;
 use crate::types::AnyError;
+use std::fs;
 
-const RUNTIME_DIR: &str = "/run/container-runtime";
+pub fn state(args: StateArgs) -> Result<(), AnyError> {
+    let run_dir = format!("/tmp/containerruntime/{}", args.container_id);
+    let pid_path = format!("{}/pid", run_dir);
+    let kill_fd_path = format!("{}/kill_fd", run_dir);
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum ContainerStatus {
-    Created,
-    Running,
-    Stopped,
-}
+    if !std::path::Path::new(&pid_path).exists() {
+        return Err(format!("container '{}' not found", args.container_id).into());
+    }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ContainerState {
-    pub id: String,
-    pub pid: u32,
-    pub status: ContainerStatus,
-    pub bundle: String,
-}
+    let pid = fs::read_to_string(&pid_path)?;
+    let status = if std::path::Path::new(&kill_fd_path).exists() {
+        "running"
+    } else {
+        "stopped"
+    };
 
-pub fn save(args: StateArgs) -> Result<(), AnyError> {
-    todo!()
-}
+    println!("id: {}", args.container_id);
+    println!("pid: {}", pid.trim());
+    println!("status: {}", status);
 
-pub fn load(container_id: &str) -> Result<(), AnyError> {
-    todo!()
-}
-
-pub fn delete(container_id: &str) -> Result<(), AnyError> {
-    todo!()
-}
-
-fn container_dir(id: &str) -> PathBuf {
-    Path::new(RUNTIME_DIR).join(id)
+    Ok(())
 }

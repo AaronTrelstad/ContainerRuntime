@@ -15,7 +15,7 @@ fn main() {
         Command::Start(args)  => container::start::start(args),
         Command::Kill(args)   => container::kill::kill(args),
         Command::Delete(args) => container::delete::delete(args),
-        Command::State(args)  => container::state::save(args),
+        Command::State(args)  => container::state::state(args),
     };
 
     if let Err(e) = cmd_result {
