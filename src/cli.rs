@@ -9,9 +9,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     Create(CreateArgs),
-    Start(StartArgs),
     Kill(KillArgs),
-    Delete(DeleteArgs),
     State(StateArgs)
 }
 
