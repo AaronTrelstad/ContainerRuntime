@@ -13,7 +13,7 @@ pub fn kill(args: KillArgs) -> Result<(), AnyError> {
     let pid: i32 = pid_str.trim().parse()
         .map_err(|_| "invalid pid")?;
 
-    nix_kill(Pid::from_raw(pid), Signal::SIGTERM)?;
+    nix_kill(Pid::from_raw(pid), Signal::SIGKILL)?;
 
     println!("Container '{}' killed", args.container_id);
     Ok(())

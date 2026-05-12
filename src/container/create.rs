@@ -1,13 +1,13 @@
 use nix::sched::{CloneFlags, clone};
-use nix::sys::signal::{SigSet, Signal};
+use nix::sys::signal::Signal;
 use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::{close, pipe, read, write};
+use nix::unistd::{close, execv, pipe, read, write};
 use std::fs;
 use std::os::fd::{BorrowedFd, IntoRawFd};
 use std::os::unix::io::RawFd;
 
 use crate::cli::{CreateArgs, StartArgs};
-use crate::container::filesystem::{prepare_rootfs, pivot_rootfs};
+use crate::container::filesystem::{pivot_rootfs, prepare_rootfs};
 use crate::types::AnyError;
 
 const MEMORY_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
@@ -35,7 +35,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     let child_pid = unsafe {
         clone(
-            Box::new(move || match run_child(sync_read_fd, &rootfs) {
+            Box::new(move || match run_child(sync_read_fd, rootfs.clone()) {
                 Ok(_) => 0,
                 Err(e) => {
                     eprintln!("[child] error: {}", e);
@@ -87,24 +87,21 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     Ok(())
 }
 
-fn run_child(sync_read_fd: RawFd, rootfs: &str) -> Result<(), AnyError> {
+fn run_child(sync_read_fd: RawFd, rootfs: String) -> Result<(), AnyError> {
     let mut buf = [0u8; 1];
-    eprintln!("waiting for sync signal");
+    eprintln!("waiting for sync signal...");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
 
-    pivot_rootfs(rootfs)?;
+    eprintln!("setting up filesystem...");
+    pivot_rootfs(&rootfs)?;
 
-    eprintln!("inside container, PID={}", std::process::id());
+    eprintln!("inside container (PID={})", std::process::id());
 
-    let mut mask = SigSet::empty();
-    mask.add(Signal::SIGTERM);
-    mask.thread_block()?;
+    let shell = CString::new("/bin/sh")?;
+    execv(&shell, &[&shell])?;
 
-    eprintln!("waiting for SIGTERM");
-    mask.wait()?;
-
-    eprintln!("shutting down");
+    // unreachable — execv never returns on success
     Ok(())
 }
 
