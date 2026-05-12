@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use nix::mount::{mount, umount2, MntFlags, MsFlags};
-use nix::sys::stat::{makedev, mknod, Mode, SFlag};
+use nix::mount::{MntFlags, MsFlags, mount, umount2};
+use nix::sys::stat::{Mode, SFlag, makedev, mknod};
 
 use crate::types::AnyError;
 
@@ -32,6 +32,22 @@ pub fn prepare_rootfs(container_id: &str) -> Result<String, AnyError> {
 
     for dir in ROOTFS_DIRS {
         fs::create_dir_all(format!("{}/{}", rootfs, dir))?;
+    }
+
+    let lib64_link = format!("{}/lib64", rootfs);
+    let lib_link = format!("{}/lib", rootfs);
+
+    if Path::new(&lib64_link).is_dir() && !Path::new(&lib64_link).is_symlink() {
+        if fs::read_dir(&lib64_link)?.next().is_none() {
+            fs::remove_dir(&lib64_link)?;
+            std::os::unix::fs::symlink("usr/lib64", &lib64_link)?;
+        }
+    }
+    if Path::new(&lib_link).is_dir() && !Path::new(&lib_link).is_symlink() {
+        if fs::read_dir(&lib_link)?.next().is_none() {
+            fs::remove_dir(&lib_link)?;
+            std::os::unix::fs::symlink("usr/lib", &lib_link)?;
+        }
     }
 
     fs::write(
@@ -122,11 +138,11 @@ fn create_devices(rootfs: &str) -> Result<(), AnyError> {
     let dev_path = format!("{}/dev", rootfs);
 
     let devices = &[
-        ("null",    1u64, 3u64), 
-        ("zero",    1,    5),  
-        ("random",  1,    8),    
-        ("urandom", 1,    9),   
-        ("tty",     5,    0),   
+        ("null", 1u64, 3u64),
+        ("zero", 1, 5),
+        ("random", 1, 8),
+        ("urandom", 1, 9),
+        ("tty", 5, 0),
     ];
 
     let mode = Mode::from_bits_truncate(0o666);
@@ -182,7 +198,7 @@ fn copy_libs(binary: &str, rootfs: &str) -> Result<(), AnyError> {
         let dest = format!("{}{}", rootfs, lib);
 
         if Path::new(&dest).exists() {
-            continue; // already copied
+            continue;
         }
 
         if let Some(parent) = Path::new(&dest).parent() {
@@ -191,16 +207,24 @@ fn copy_libs(binary: &str, rootfs: &str) -> Result<(), AnyError> {
 
         if Path::new(lib).is_symlink() {
             let real = fs::canonicalize(lib)?;
-            let real_dest = format!("{}{}", rootfs, real.display());
-
-            if let Some(parent) = Path::new(&real_dest).parent() {
-                fs::create_dir_all(parent)?;
-            }
-            if !Path::new(&real_dest).exists() {
-                fs::copy(&real, &real_dest)?;
-            }
-
             let link_target = fs::read_link(lib)?;
+
+            let lib_dir = Path::new(&dest).parent().unwrap();
+            let real_filename = real.file_name().ok_or("library has no filename")?;
+            let real_dest = lib_dir.join(real_filename);
+
+            if !real_dest.exists() {
+                eprintln!("[fs] copying {} -> {}", real.display(), real_dest.display());
+                fs::copy(&real, &real_dest).map_err(|e| {
+                    format!(
+                        "copy real lib {} -> {}: {}",
+                        real.display(),
+                        real_dest.display(),
+                        e
+                    )
+                })?;
+            }
+
             std::os::unix::fs::symlink(&link_target, &dest).ok();
         } else {
             fs::copy(lib, &dest)?;
@@ -216,7 +240,7 @@ fn parse_ldd_line(line: &str) -> Option<&str> {
         let rhs = line.split("=>").nth(1)?.trim();
         let path = rhs.split_whitespace().next()?;
         if path == "not" {
-            None 
+            None // "not found"
         } else {
             Some(path)
         }

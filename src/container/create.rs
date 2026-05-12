@@ -6,6 +6,7 @@ use std::fs;
 use std::os::fd::{BorrowedFd, IntoRawFd};
 use std::os::unix::io::RawFd;
 use std::ffi::CString;
+use nix::mount::{umount2, MntFlags};
 
 use crate::cli::{CreateArgs, StartArgs};
 use crate::container::filesystem::{pivot_rootfs, prepare_rootfs};
@@ -142,13 +143,21 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
 }
 
 pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
+    let rootfs = format!("/tmp/containerruntime/{}/rootfs", container_id);
+    for dir in &["proc", "sys", "dev", "tmp"] {
+        let path = format!("{}/{}", rootfs, dir);
+        umount2(path.as_str(), MntFlags::MNT_DETACH).ok(); 
+    }
+    umount2(rootfs.as_str(), MntFlags::MNT_DETACH).ok();
+
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
     if !std::path::Path::new(&cgroup_path).exists() {
         return Ok(());
     }
 
-    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path)).unwrap_or_default();
+    let procs = fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
+        .unwrap_or_default();
 
     for pid in procs.split_whitespace() {
         fs::write("/sys/fs/cgroup/cgroup.procs", pid)
