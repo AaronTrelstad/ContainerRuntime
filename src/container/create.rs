@@ -7,6 +7,7 @@ use std::os::fd::{BorrowedFd, IntoRawFd};
 use std::os::unix::io::RawFd;
 
 use crate::cli::{CreateArgs, StartArgs};
+use crate::container::filesystem::{prepare_rootfs, pivot_rootfs};
 use crate::types::AnyError;
 
 const MEMORY_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
@@ -16,6 +17,8 @@ const CGROUP_ROOT: &str = "/sys/fs/cgroup/containerruntime";
 
 pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     cleanup_cgroup(&args.container_id)?;
+
+    let rootfs = prepare_rootfs(&args.container_id)?;
 
     let (sync_read_fd, sync_write_fd) = {
         let (r, w) = pipe()?;
@@ -32,7 +35,7 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
     let child_pid = unsafe {
         clone(
-            Box::new(move || match run_child(sync_read_fd) {
+            Box::new(move || match run_child(sync_read_fd, &rootfs) {
                 Ok(_) => 0,
                 Err(e) => {
                     eprintln!("[child] error: {}", e);
@@ -84,11 +87,13 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     Ok(())
 }
 
-fn run_child(sync_read_fd: RawFd) -> Result<(), AnyError> {
+fn run_child(sync_read_fd: RawFd, rootfs: &str) -> Result<(), AnyError> {
     let mut buf = [0u8; 1];
     eprintln!("waiting for sync signal");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
+
+    pivot_rootfs(rootfs)?;
 
     eprintln!("inside container, PID={}", std::process::id());
 
