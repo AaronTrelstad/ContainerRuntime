@@ -56,6 +56,14 @@ pub fn prepare_rootfs(container_id: &str) -> Result<String, AnyError> {
 
 pub fn pivot_rootfs(rootfs: &str) -> Result<(), AnyError> {
     mount(
+        None::<&str>,
+        "/",
+        None::<&str>,
+        MsFlags::MS_PRIVATE | MsFlags::MS_REC,
+        None::<&str>,
+    )?;
+
+    mount(
         Some(rootfs),
         rootfs,
         None::<&str>,
@@ -65,7 +73,7 @@ pub fn pivot_rootfs(rootfs: &str) -> Result<(), AnyError> {
 
     mount(
         Some("proc"),
-        format!("{}/proc", rootfs).as_str(),  
+        format!("{}/proc", rootfs).as_str(),
         Some("proc"),
         MsFlags::empty(),
         None::<&str>,
@@ -98,7 +106,7 @@ pub fn pivot_rootfs(rootfs: &str) -> Result<(), AnyError> {
     )?;
 
     let old_root = format!("{}/.old_root", rootfs);
-    nix::unistd::pivot_root(rootfs, old_root.as_str())?;  
+    nix::unistd::pivot_root(rootfs, old_root.as_str())?;
 
     std::env::set_current_dir("/")?;
 
@@ -114,11 +122,11 @@ fn create_devices(rootfs: &str) -> Result<(), AnyError> {
     let dev_path = format!("{}/dev", rootfs);
 
     let devices = &[
-        ("null",    1u64, 3u64),
-        ("zero",    1,    5),
-        ("random",  1,    8),
-        ("urandom", 1,    9),
-        ("tty",     5,    0),
+        ("null",    1u64, 3u64), 
+        ("zero",    1,    5),  
+        ("random",  1,    8),    
+        ("urandom", 1,    9),   
+        ("tty",     5,    0),   
     ];
 
     let mode = Mode::from_bits_truncate(0o666);
@@ -162,9 +170,7 @@ fn copy_libs(binary: &str, rootfs: &str) -> Result<(), AnyError> {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     for line in stdout.lines() {
-        let lib_path = parse_ldd_line(line);
-
-        let lib = match lib_path {
+        let lib = match parse_ldd_line(line) {
             Some(p) if p.starts_with('/') => p,
             _ => continue,
         };
@@ -176,7 +182,7 @@ fn copy_libs(binary: &str, rootfs: &str) -> Result<(), AnyError> {
         let dest = format!("{}{}", rootfs, lib);
 
         if Path::new(&dest).exists() {
-            continue;
+            continue; // already copied
         }
 
         if let Some(parent) = Path::new(&dest).parent() {
@@ -210,7 +216,7 @@ fn parse_ldd_line(line: &str) -> Option<&str> {
         let rhs = line.split("=>").nth(1)?.trim();
         let path = rhs.split_whitespace().next()?;
         if path == "not" {
-            None
+            None 
         } else {
             Some(path)
         }
