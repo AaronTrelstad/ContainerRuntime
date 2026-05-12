@@ -5,6 +5,7 @@ use nix::unistd::{close, execv, pipe, read, write};
 use std::fs;
 use std::os::fd::{BorrowedFd, IntoRawFd};
 use std::os::unix::io::RawFd;
+use std::ffi::CString;
 
 use crate::cli::{CreateArgs, StartArgs};
 use crate::container::filesystem::{pivot_rootfs, prepare_rootfs};
@@ -101,7 +102,6 @@ fn run_child(sync_read_fd: RawFd, rootfs: String) -> Result<(), AnyError> {
     let shell = CString::new("/bin/sh")?;
     execv(&shell, &[&shell])?;
 
-    // unreachable — execv never returns on success
     Ok(())
 }
 
