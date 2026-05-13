@@ -99,8 +99,10 @@ fn run_child(sync_read_fd: RawFd, rootfs: String) -> Result<(), AnyError> {
     eprintln!("setting up filesystem...");
     pivot_rootfs(&rootfs)?;
 
-    eprintln!("inside container (PID={})", std::process::id());
+    eprintln!("applying seccomp filter...");
     apply_seccomp_filter()?;
+
+    eprintln!("inside container (PID={})", std::process::id());
 
     let shell = CString::new("/bin/sh")?;
     execv(&shell, &[&shell])?;

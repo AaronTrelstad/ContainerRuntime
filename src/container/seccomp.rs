@@ -2,8 +2,8 @@ use libseccomp::{ScmpAction, ScmpFilterContext, ScmpSyscall};
 use crate::types::AnyError;
 
 pub fn apply_seccomp_filter() -> Result<(), AnyError> {
-    let mut filter = ScmpFilterContext::new_filter(ScmpAction::KillProcess)?;
-
+    let mut filter = ScmpFilterContext::new_filter(ScmpAction::Errno(1))?;
+    
     let allowed = vec![
         "read", "write", "open", "openat", "close", "stat", "fstat",
         "lstat", "lseek", "pread64", "pwrite64", "readv", "writev",
