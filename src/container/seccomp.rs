@@ -2,7 +2,7 @@ use libseccomp::{ScmpAction, ScmpFilterContext, ScmpSyscall};
 use crate::types::AnyError;
 
 pub fn apply_seccomp_filter() -> Result<(), AnyError> {
-    let mut filter = ScmpFilterContext::new_filter(ScmpAction::Errno(1))?;
+    let mut filter = ScmpFilterContext::new_filter(ScmpAction::KillProcess)?;
 
     let allowed = vec![
         "read", "write", "open", "openat", "close", "stat", "fstat",
@@ -43,6 +43,8 @@ pub fn apply_seccomp_filter() -> Result<(), AnyError> {
         "signalfd", "signalfd4", "timerfd_create", "timerfd_settime",
         "timerfd_gettime", "eventfd", "eventfd2", "getrandom", "statx",
         "getcpu", "preadv", "pwritev",
+
+        "rseq", "set_tid_address", "set_robust_list",
     ];
 
     for syscall_name in &allowed {
