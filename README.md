@@ -20,7 +20,7 @@ ssh -i ~/Downloads/*.pem ec2-user@<your-ec2-ip>
 ```
 
 ```bash
-sudo yum install git gcc -y
+sudo yum install git gcc libseccomp-devel -y 
 ```
 
 ```bash
