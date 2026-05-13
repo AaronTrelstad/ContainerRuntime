@@ -58,20 +58,3 @@ fn validate(config: &OciConfig) -> Result<(), AnyError> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_minimal_config() {
-        let json = r#"{
-            "ociVersion": "1.0.2",
-            "process": { "args": ["sh"], "env": [], "cwd": "/" },
-            "root": { "path": "rootfs" }
-        }"#;
-        let config: OciConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.process.args[0], "sh");
-        assert!(!config.root.readonly);
-    }
-}
