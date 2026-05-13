@@ -59,14 +59,12 @@ pub fn prepare_rootfs(container_id: &str) -> Result<String, AnyError> {
 
     for bin in HOST_BINARIES {
         if !Path::new(bin).exists() {
-            eprintln!("[fs] skipping {} (not found on host)", bin);
             continue;
         }
         copy_file_into_rootfs(bin, &rootfs)?;
         copy_libs(bin, &rootfs)?;
     }
 
-    eprintln!("[fs] rootfs ready at {}", rootfs);
     Ok(rootfs)
 }
 
@@ -130,7 +128,6 @@ pub fn pivot_rootfs(rootfs: &str) -> Result<(), AnyError> {
 
     fs::remove_dir("/.old_root").ok();
 
-    eprintln!("[fs] pivot_root complete, host filesystem detached");
     Ok(())
 }
 
@@ -164,7 +161,6 @@ fn create_devices(rootfs: &str) -> Result<(), AnyError> {
         })?;
     }
 
-    eprintln!("[fs] /dev devices created");
     Ok(())
 }
 
@@ -214,7 +210,6 @@ fn copy_libs(binary: &str, rootfs: &str) -> Result<(), AnyError> {
             let real_dest = lib_dir.join(real_filename);
 
             if !real_dest.exists() {
-                eprintln!("[fs] copying {} -> {}", real.display(), real_dest.display());
                 fs::copy(&real, &real_dest).map_err(|e| {
                     format!(
                         "copy real lib {} -> {}: {}",

@@ -189,9 +189,5 @@ pub fn apply_seccomp_filter() -> Result<(), AnyError> {
 
     filter.load()?;
 
-    eprintln!(
-        "[seccomp] filter loaded — {} syscalls allowed",
-        allowed.len()
-    );
     Ok(())
 }
