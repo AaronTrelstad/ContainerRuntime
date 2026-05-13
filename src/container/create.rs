@@ -89,7 +89,6 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
 
 fn run_child(sync_read_fd: RawFd, rootfs: String) -> Result<(), AnyError> {
     let mut buf = [0u8; 1];
-    eprintln!("waiting for sync signal...");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
     pivot_rootfs(&rootfs)?;
