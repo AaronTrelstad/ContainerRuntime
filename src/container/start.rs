@@ -11,7 +11,5 @@ pub fn start(args: StartArgs) -> Result<(), AnyError> {
 
     fs::write(format!("{}/status", run_dir), "running")?;
 
-    println!("Container '{}' started", args.container_id);
-
     Ok(())
 }

@@ -62,8 +62,6 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
     fs::write(format!("{}/pid", run_dir), child_pid.as_raw().to_string())?;
     fs::write(format!("{}/status", run_dir), "created")?;
 
-    println!("Container '{}' created", args.container_id);
-
     crate::container::start::start(StartArgs {
         container_id: args.container_id.clone(),
     })?;
@@ -84,7 +82,6 @@ pub fn create(args: CreateArgs) -> Result<(), AnyError> {
         Err(e) => return Err(Box::new(e)),
     }
 
-    println!("Container '{}' exited", args.container_id);
     cleanup_cgroup(&args.container_id)?;
     fs::remove_dir_all(&run_dir)?;
     Ok(())
@@ -95,15 +92,8 @@ fn run_child(sync_read_fd: RawFd, rootfs: String) -> Result<(), AnyError> {
     eprintln!("waiting for sync signal...");
     unsafe { read(BorrowedFd::borrow_raw(sync_read_fd), &mut buf)? };
     close(sync_read_fd)?;
-
-    eprintln!("setting up filesystem...");
     pivot_rootfs(&rootfs)?;
-
-    eprintln!("applying seccomp filter...");
     apply_seccomp_filter()?;
-
-    eprintln!("inside container (PID={})", std::process::id());
-
     let shell = CString::new("/bin/sh")?;
     execv(&shell, &[&shell])?;
 
@@ -135,13 +125,6 @@ fn setup_cgroup(container_id: &str, pid: i32) -> Result<(), AnyError> {
 
     fs::write(format!("{}/cgroup.procs", cgroup_path), pid.to_string())
         .map_err(|e| format!("cgroup.procs: {}", e))?;
-
-    println!(
-        "cgroup ready: memory={}MB cpu={}% path={}",
-        MEMORY_LIMIT_BYTES / (1024 * 1024),
-        (CPU_QUOTA_USEC * 100) / CPU_PERIOD_USEC,
-        cgroup_path
-    );
 
     Ok(())
 }

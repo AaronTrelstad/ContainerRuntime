@@ -15,6 +15,5 @@ pub fn kill(args: KillArgs) -> Result<(), AnyError> {
 
     nix_kill(Pid::from_raw(pid), Signal::SIGKILL)?;
 
-    println!("Container '{}' killed", args.container_id);
     Ok(())
 }
