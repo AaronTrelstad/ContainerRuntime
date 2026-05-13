@@ -10,6 +10,7 @@ use std::os::unix::io::RawFd;
 
 use crate::cli::{CreateArgs, StartArgs};
 use crate::container::filesystem::{pivot_rootfs, prepare_rootfs};
+use crate::container::seccomp::apply_seccomp_filter;
 use crate::types::AnyError;
 
 const MEMORY_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
@@ -99,6 +100,7 @@ fn run_child(sync_read_fd: RawFd, rootfs: String) -> Result<(), AnyError> {
     pivot_rootfs(&rootfs)?;
 
     eprintln!("inside container (PID={})", std::process::id());
+    apply_seccomp_filter()?;
 
     let shell = CString::new("/bin/sh")?;
     execv(&shell, &[&shell])?;

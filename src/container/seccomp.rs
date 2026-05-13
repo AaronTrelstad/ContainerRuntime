@@ -1,0 +1,58 @@
+use libseccomp::{ScmpAction, ScmpFilterContext, ScmpSyscall};
+use crate::types::AnyError;
+
+pub fn apply_seccomp_filter() -> Result<(), AnyError> {
+    let mut filter = ScmpFilterContext::new_filter(ScmpAction::KillProcess)?;
+
+    let allowed = vec![
+        "read", "write", "open", "openat", "close", "stat", "fstat",
+        "lstat", "lseek", "pread64", "pwrite64", "readv", "writev",
+        "access", "dup", "dup2", "dup3", "pipe", "pipe2", "truncate",
+        "ftruncate", "getcwd", "chdir", "fchdir", "rename", "mkdir",
+        "rmdir", "creat", "link", "unlink", "symlink", "readlink",
+        "chmod", "fchmod", "chown", "fchown", "lchown", "umask",
+        "getdents", "getdents64", "newfstatat", "readlinkat",
+        "fallocate", "fsync", "fdatasync", "sendfile",
+
+        "mmap", "mprotect", "munmap", "brk", "mremap", "msync",
+        "mincore", "madvise", "memfd_create",
+
+        "clone", "fork", "vfork", "execve", "exit", "exit_group",
+        "wait4", "getpid", "getppid", "gettid", "getuid", "getgid",
+        "geteuid", "getegid", "setuid", "setgid", "getgroups",
+        "setgroups", "getpgrp", "setpgid", "setsid", "prctl",
+        "arch_prctl", "getpriority", "setpriority",
+
+        "kill", "rt_sigaction", "rt_sigprocmask", "rt_sigreturn",
+        "rt_tgsigqueueinfo", "sigaltstack",
+
+        "gettimeofday", "clock_gettime", "clock_getres",
+        "clock_nanosleep", "nanosleep", "getitimer", "setitimer",
+        "alarm", "times",
+
+        "ioctl", "fcntl", "flock", "select", "poll", "epoll_create",
+        "epoll_create1", "epoll_ctl", "epoll_wait", "inotify_init1",
+
+        "socket", "connect", "accept", "accept4", "sendto", "recvfrom",
+        "shutdown", "bind", "listen", "getsockname", "getpeername",
+        "socketpair", "setsockopt", "getsockopt", "sendmmsg", "recvmmsg",
+
+        "uname", "sysinfo", "getrlimit", "prlimit64", "getrusage",
+        "futex", "set_tid_address", "set_robust_list", "get_robust_list",
+        "sched_yield", "splice", "tee", "sync_file_range",
+        "signalfd", "signalfd4", "timerfd_create", "timerfd_settime",
+        "timerfd_gettime", "eventfd", "eventfd2", "getrandom", "statx",
+        "getcpu", "preadv", "pwritev",
+    ];
+
+    for syscall_name in &allowed {
+        let syscall = ScmpSyscall::from_name(syscall_name)
+            .map_err(|e| format!("unknown syscall {}: {}", syscall_name, e))?;
+        filter.add_rule(ScmpAction::Allow, syscall)?;
+    }
+
+    filter.load()?;
+
+    eprintln!("[seccomp] filter loaded — {} syscalls allowed", allowed.len());
+    Ok(())
+}
