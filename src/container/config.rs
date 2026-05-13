@@ -2,23 +2,31 @@ use serde::Deserialize;
 use std::path::Path;
 use crate::types::AnyError;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OciConfig {
     pub oci_version: String,
     pub process: Process,
     pub root: Root,
     pub hostname: Option<String>,
+    #[serde(default)]
+    pub memory_limit: Option<u64>,
+    #[serde(default)]
+    pub cpu_quota: Option<u64>,
+    #[serde(default)]
+    pub cpu_period: Option<u64>,
+    #[serde(default)]
+    pub c_group_root: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Root {
     pub path: String,
     #[serde(default)]
     pub readonly: bool,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Process {
     pub args: Vec<String>,
     #[serde(default)]
@@ -33,11 +41,9 @@ pub fn load_config(bundle_path: &str) -> Result<OciConfig, AnyError> {
         return Err(format!("config.json not found in bundle: {}", bundle_path).into());
     }
     
-    let contents = std::fs::read_to_string(&config_path)
-        .map_err(|e| format!("failed to read config.json: {}", e))?;
+    let contents = std::fs::read_to_string(&config_path).map_err(|e| format!("failed to read config.json: {}", e))?;
     
-    let config: OciConfig = serde_json::from_str(&contents)
-        .map_err(|e| format!("failed to parse config.json: {}", e))?;
+    let config: OciConfig = serde_json::from_str(&contents).map_err(|e| format!("failed to parse config.json: {}", e))?;
     
     validate(&config)?;
     Ok(config)

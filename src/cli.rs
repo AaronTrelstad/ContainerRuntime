@@ -15,7 +15,9 @@ pub enum Command {
 
 #[derive(Parser, Debug)]
 pub struct CreateArgs {
-    pub container_id: String
+    pub container_id: String,
+    #[arg(short, long, default_value = ".")]
+    pub bundle: String
 }
 
 #[derive(Parser, Debug)]
