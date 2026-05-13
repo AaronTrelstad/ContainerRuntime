@@ -153,6 +153,7 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
     let cgroup_path = format!("{}/{}", CGROUP_ROOT, container_id);
 
     if !std::path::Path::new(&cgroup_path).exists() {
+        fs::remove_dir(CGROUP_ROOT).ok();
         return Ok(());
     }
 
@@ -165,7 +166,10 @@ pub fn cleanup_cgroup(container_id: &str) -> Result<(), AnyError> {
 
     for attempt in 1..=5 {
         match fs::remove_dir(&cgroup_path) {
-            Ok(_) => return Ok(()),
+            Ok(_) => {
+                fs::remove_dir(CGROUP_ROOT).ok();
+                return Ok(());
+            }
             Err(e) if e.raw_os_error() == Some(16) => {
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 if attempt == 5 {
