@@ -235,7 +235,7 @@ fn parse_ldd_line(line: &str) -> Option<&str> {
         let rhs = line.split("=>").nth(1)?.trim();
         let path = rhs.split_whitespace().next()?;
         if path == "not" {
-            None // "not found"
+            None
         } else {
             Some(path)
         }
